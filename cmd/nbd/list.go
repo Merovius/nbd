@@ -1,3 +1,5 @@
+// +build linux
+
 package main
 
 import (
@@ -12,6 +14,10 @@ import (
 	"github.com/Merovius/nbd/nbdnl"
 	"github.com/google/subcommands"
 )
+
+func init() {
+	commands = append(commands, &listCmd{})
+}
 
 type listCmd struct {
 }

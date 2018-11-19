@@ -3,16 +3,18 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"os"
 
 	"github.com/google/subcommands"
 )
 
+var commands []subcommands.Command
+
 func main() {
-	log.SetFlags(log.Lshortfile)
 	flag.Parse()
-	subcommands.Register(new(listCmd), "")
-	subcommands.Register(new(loCmd), "")
+	subcommands.Register(subcommands.HelpCommand(), "")
+	for _, c := range commands {
+		subcommands.Register(c, "")
+	}
 	os.Exit(int(subcommands.Execute(context.Background())))
 }
