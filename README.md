@@ -14,7 +14,7 @@ Please comment/vote on the corresponding issue.
 
 # Installation
 
-Currently, this is pre-release, so the onlý way to install is from source. To
+Currently, this is pre-release, so the only way to install is from source. To
 do that, use
 
 ```
