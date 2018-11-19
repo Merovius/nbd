@@ -82,7 +82,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-
+[beta-issues]: https://github.com/Merovius/nbd/issues?q=is%3Aissue+is%3Aopen+label%3Abeta
 [nbd-proto]: https://sourceforge.net/p/nbd/code/ci/master/tree/doc/proto.md
 [nbd-netlink-h]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/nbd-netlink.h
 [nbd-tool]: #nbd-tool
