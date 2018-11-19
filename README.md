@@ -45,6 +45,9 @@ crash and then check invariants (after re-mounting). This can provide some
 confidence (though no guarantees) that your code works with actual
 filesystem-implementations.
 
+Note, that any code that wants to configure the in-kernel NBD client has to be
+privileged (the process needs to have `CAP_SYS_ADMIN`).
+
 # NBD tool
 
 This repo contains basic CLI tool to configure/serve/connect to NBD devices. You can install it via
