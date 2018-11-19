@@ -4,7 +4,6 @@ package nbd
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 
@@ -37,7 +36,6 @@ func Configure(e Export, socks ...*os.File) (uint32, error) {
 func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func() error, err error) {
 	sp, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
-		log.Println(err)
 		return 0, nil, err
 	}
 	exp := Export{Size: size, Device: d, BlockSizes: &defaultBlockSizes}
@@ -46,7 +44,6 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 	serverc, err := net.FileConn(server)
 	server.Close()
 	if err != nil {
-		log.Println(err)
 		client.Close()
 		return 0, nil, err
 	}
@@ -59,9 +56,7 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 	}()
 	go func() {
 		err := serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
-		log.Println(err)
 		if e := ctx.Err(); e != nil {
-			log.Println(err)
 			err = e
 		}
 		cancel()
@@ -72,7 +67,6 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 
 	idx, err = Configure(exp, client)
 	if err != nil {
-		log.Println(err)
 		cancel()
 		return 0, nil, err
 	}

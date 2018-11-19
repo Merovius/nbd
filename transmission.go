@@ -3,7 +3,6 @@ package nbd
 import (
 	"context"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -70,14 +69,11 @@ func serve(ctx context.Context, c net.Conn, p connParameters) error {
 		var req request
 		for {
 			if err := req.decode(e); err != nil {
-				log.Println("Error decoding:", err)
 				respondErr(e, req.handle, err)
 				continue
 			}
-			log.Printf("decoded request: %#v", req)
 			switch req.typ {
 			case cmdRead:
-				log.Printf("Read request")
 				if req.length == 0 {
 					respondErr(e, req.handle, EINVAL)
 					continue
@@ -85,25 +81,20 @@ func serve(ctx context.Context, c net.Conn, p connParameters) error {
 				buf := make([]byte, req.length)
 				_, err := p.Export.Device.ReadAt(buf, int64(req.offset))
 				if err != nil {
-					log.Println(err)
 					respondErr(e, req.handle, err)
 					continue
 				}
-				log.Printf("Read successfull")
 				(&simpleReply{0, req.handle, buf, 0}).encode(e)
 			case cmdWrite:
-				log.Printf("Write request")
 				if req.length == 0 {
 					respondErr(e, req.handle, EINVAL)
 					continue
 				}
 				_, err := p.Export.Device.WriteAt(req.data, int64(req.offset))
 				if err != nil {
-					log.Println(err)
 					respondErr(e, req.handle, err)
 					continue
 				}
-				log.Printf("Write successfull")
 				(&simpleReply{0, req.handle, nil, 0}).encode(e)
 			case cmdDisc:
 				return
@@ -127,7 +118,6 @@ func serve(ctx context.Context, c net.Conn, p connParameters) error {
 
 // respondErr writes an error respons to e, based on handle an err.
 func respondErr(e *encoder, handle uint64, err error) {
-	msg := err.Error()
 	code := EIO
 	if e, ok := err.(Error); ok {
 		code = e.Errno()
@@ -135,8 +125,7 @@ func respondErr(e *encoder, handle uint64, err error) {
 	rep := simpleReply{
 		errno:  uint32(code),
 		handle: handle,
-		length: uint32(len(msg)),
-		data:   []byte(msg),
+		length: 0,
 	}
 	rep.encode(e)
 }

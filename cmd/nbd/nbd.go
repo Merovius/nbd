@@ -13,6 +13,6 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 	flag.Parse()
 	subcommands.Register(new(listCmd), "")
-	subcommands.Register(new(serveCmd), "")
+	subcommands.Register(new(loCmd), "")
 	os.Exit(int(subcommands.Execute(context.Background())))
 }
