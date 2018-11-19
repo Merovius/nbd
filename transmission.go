@@ -48,6 +48,7 @@ func ListenAndServe(ctx context.Context, network, addr string, exp ...Export) er
 		go func() {
 			defer wg.Done()
 			Serve(ctx, c, exp...)
+			c.Close()
 		}()
 	}
 }

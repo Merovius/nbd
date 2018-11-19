@@ -3,6 +3,7 @@ package nbd
 import (
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -27,7 +28,7 @@ type optionRequest interface {
 func decodeOption(e *encoder) (uint32, interface{}, errno) {
 	magic := e.uint64()
 	if magic != optMagic {
-		e.check(errors.New("invalid option magic"))
+		e.check(fmt.Errorf("invalid option magic 0x%x", magic))
 	}
 	option := e.uint32()
 	length := e.uint32()
@@ -117,7 +118,7 @@ func (o *optInfo) code() uint32 {
 
 func (o *optInfo) decode(e *encoder, l uint32) errno {
 	nlen := e.uint32()
-	if l < 6 || nlen < l-6 {
+	if l < 6 || nlen > l-6 {
 		return errInvalid
 	}
 	name := make([]byte, nlen)
@@ -156,6 +157,31 @@ const (
 	errBlockSizeReqd
 	errTooBig
 )
+
+func (e errno) String() string {
+	switch e {
+	case errUnsup:
+		return "ERR_UNSUP"
+	case errPolicy:
+		return "ERR_POLICY"
+	case errInvalid:
+		return "ERR_INVALID"
+	case errPlatform:
+		return "ERR_PLATFORM"
+	case errTLSReqd:
+		return "ERR_TLS_REQD"
+	case errUnknown:
+		return "ERR_UNKNOWN"
+	case errShutdown:
+		return "ERR_SHUTDOWN"
+	case errBlockSizeReqd:
+		return "ERR_BLOCK_SIZE_REQD"
+	case errTooBig:
+		return "ERR_TOO_BIG"
+	default:
+		return "0x" + strconv.FormatUint(uint64(e), 16)
+	}
+}
 
 type optionReply interface {
 	code() uint32
@@ -342,9 +368,7 @@ type repError struct {
 
 func (r *repError) code() uint32 { return uint32(r.errno) }
 
-func (r *repError) encode(e *encoder) {
-	e.writeString(r.msg)
-}
+func (r *repError) encode(e *encoder) {}
 
 func (r *repError) decode(e *encoder, l uint32) {
 	if l > (4 << 20) {
@@ -356,7 +380,10 @@ func (r *repError) decode(e *encoder, l uint32) {
 }
 
 func (r *repError) Error() string {
-	return r.msg
+	if r.msg != "" {
+		return fmt.Sprintf("%s (%s)", r.msg, r.errno)
+	}
+	return r.errno.String()
 }
 
 const (

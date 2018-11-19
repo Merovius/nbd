@@ -1,10 +1,12 @@
 package nbd
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 )
 
 // Export specifies the data needed for the NBD network protocol.
@@ -42,13 +44,13 @@ func serverHandshake(rw io.ReadWriter, exp []Export) (connParameters, error) {
 		e.writeUint64(nbdMagic)
 		e.writeUint64(optMagic)
 		e.writeUint16(flagDefaults)
-		clientFlags := e.uint16()
+		clientFlags := e.uint32()
 
-		if clientFlags & ^uint16(flagDefaults) != 0 {
-			e.check(errors.New("handshake aborted due to unknown handshake flags"))
+		if clientFlags & ^uint32(flagDefaults) != 0 {
+			e.check(fmt.Errorf("handshake aborted due to unknown handshake flags 0x%d", clientFlags & ^uint32(flagDefaults)))
 		}
 		if clientFlags != flagDefaults {
-			e.check(errors.New("refusing deprecated handshake flags"))
+			e.check(fmt.Errorf("refusing deprecated handshake flags 0x%x", clientFlags))
 		}
 
 		for {
@@ -58,7 +60,7 @@ func serverHandshake(rw io.ReadWriter, exp []Export) (connParameters, error) {
 				continue
 			}
 			switch o := o.(type) {
-			case optExportName:
+			case *optExportName:
 				var ok bool
 				parms.Export, ok = findExport(o.name, exp)
 				if !ok {
@@ -68,15 +70,15 @@ func serverHandshake(rw io.ReadWriter, exp []Export) (connParameters, error) {
 				e.writeUint64(parms.Export.Size)
 				e.writeUint16(parms.Export.Flags)
 				return
-			case optAbort:
+			case *optAbort:
 				encodeReply(e, code, &repAck{})
 				e.check(errors.New("client aborted negotiation"))
-			case optList:
+			case *optList:
 				for _, ex := range exp {
 					encodeReply(e, code, &repServer{ex.Name, ""})
 				}
 				encodeReply(e, code, &repAck{})
-			case optInfo:
+			case *optInfo:
 				var ok bool
 				parms.Export, ok = findExport(o.name, exp)
 				if !ok {
@@ -122,10 +124,9 @@ type Client struct {
 	closed bool
 }
 
-// ClientHandshake starts the client-side of the NBD handshake over rw.
-//
-// TODO: Add context support?
-func ClientHandshake(rw io.ReadWriter) (*Client, error) {
+// ClientHandshake starts the client-side of the NBD handshake over c.
+func ClientHandshake(ctx context.Context, c net.Conn) (*Client, error) {
+	rw := wrapConn(ctx, c)
 	cl := &Client{rw, false}
 	return cl, do(rw, func(e *encoder) {
 		if e.uint64() != nbdMagic {

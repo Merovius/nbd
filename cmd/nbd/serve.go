@@ -38,7 +38,7 @@ Serve a file as over NBD as a block device.
 }
 
 func (cmd *serveCmd) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&cmd.addr, "addr", "servecalhost:10809", "Address to listen on")
+	fs.StringVar(&cmd.addr, "addr", "localhost:10809", "Address to listen on")
 	fs.BoolVar(&cmd.unix, "unix", false, "Serve on a unix domain socket")
 }
 
