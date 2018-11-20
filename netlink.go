@@ -52,7 +52,12 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 	if err != nil {
 		return 0, nil, err
 	}
-	exp := Export{Size: size, Device: d, BlockSizes: &defaultBlockSizes}
+	exp := Export{
+		Size:       size,
+		Device:     d,
+		BlockSizes: &defaultBlockSizes,
+		Flags:      uint16(nbdnl.FlagHasFlags | nbdnl.FlagSendFlush),
+	}
 
 	client, server := os.NewFile(uintptr(sp[0]), "client"), os.NewFile(uintptr(sp[1]), "server")
 	serverc, err := net.FileConn(server)
