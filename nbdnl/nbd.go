@@ -201,7 +201,7 @@ func Connect(idx uint32, socks []*os.File, size uint64, cf ClientFlags, sf Serve
 		},
 		Data: body,
 	}
-	msgs, err := conn.c.Execute(msg, conn.family, netlink.HeaderFlagsRequest|netlink.HeaderFlagsAcknowledge)
+	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	if err != nil {
 		return 0, err
 	}
@@ -262,7 +262,7 @@ func Reconfigure(idx uint32, socks []*os.File, cf ClientFlags, sf ServerFlags, o
 		},
 		Data: body,
 	}
-	_, err = conn.c.Execute(msg, conn.family, netlink.HeaderFlagsRequest|netlink.HeaderFlagsAcknowledge)
+	_, err = conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	return err
 }
 
@@ -285,7 +285,7 @@ func Disconnect(idx uint32) error {
 		},
 		Data: body,
 	}
-	_, err = conn.c.Execute(msg, conn.family, netlink.HeaderFlagsRequest|netlink.HeaderFlagsAcknowledge)
+	_, err = conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	return err
 }
 
@@ -350,7 +350,7 @@ func status(idx uint32) ([]DeviceStatus, error) {
 		},
 		Data: body,
 	}
-	msgs, err := conn.c.Execute(msg, conn.family, netlink.HeaderFlagsRequest|netlink.HeaderFlagsAcknowledge)
+	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	if err != nil {
 		return nil, err
 	}
