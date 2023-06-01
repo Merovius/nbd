@@ -95,11 +95,29 @@ func (cmd *loCmd) Execute(ctx context.Context, fs *flag.FlagSet, _ ...interface{
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
-	fmt.Printf("Connected to /dev/nbd%d\n", idx)
+
+	disconnected := make(chan struct{})
+	interrupt := make(chan os.Signal, 4)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		for sig := range interrupt {
+			log.Printf("Caught %s; disconnecting /dev/nbd%d", sig, idx)
+			if err := nbdnl.Disconnect(dev.Index); err != nil {
+				log.Printf("Error while disconnecting /dev/nbd%d: %s", idx, err)
+			} else {
+				log.Printf("Disconnected /dev/nbd%d", idx)
+			}
+			close(disconnected)
+		}
+	}()
+
+	log.Printf("Connected to /dev/nbd%d", idx)
 	if err := wait(); err != nil {
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
+
+	<-disconnected
 	return subcommands.ExitSuccess
 }
 
