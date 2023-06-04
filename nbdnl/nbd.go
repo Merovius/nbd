@@ -203,7 +203,7 @@ func Connect(idx uint32, socks []*os.File, size uint64, cf ClientFlags, sf Serve
 		},
 		Data: body,
 	}
-	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
+	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request)
 	if err != nil {
 		return 0, err
 	}
@@ -264,6 +264,8 @@ func Reconfigure(idx uint32, socks []*os.File, cf ClientFlags, sf ServerFlags, o
 		},
 		Data: body,
 	}
+	// Note: nbd_genl_reconfigure doesn't send a reply, so we need to set the
+	// ACK flag here to request a reply from the transport.
 	_, err = conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	return err
 }
@@ -287,6 +289,8 @@ func Disconnect(idx uint32) error {
 		},
 		Data: body,
 	}
+	// Note: nbd_genl_disconnect doesn't send a reply, so we need to set the ACK
+	// flag here to request a reply from the transport.
 	_, err = conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
 	return err
 }
@@ -352,7 +356,7 @@ func status(idx uint32) ([]DeviceStatus, error) {
 		},
 		Data: body,
 	}
-	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request|netlink.Acknowledge)
+	msgs, err := conn.c.Execute(msg, conn.family, netlink.Request)
 	if err != nil {
 		return nil, err
 	}
