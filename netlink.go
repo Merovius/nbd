@@ -18,6 +18,7 @@ package nbd
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 
@@ -45,6 +46,8 @@ func Configure(e Export, socks ...*os.File) (uint32, error) {
 // to connect to an NBD device. It returns the device-number that the kernel
 // chose. wait should be called to check for errors from serving the device. It
 // blocks until ctx is cancelled or an error occurs (so it behaves like Serve).
+// When ctx is cancelled, the device will be disconnected, and any error
+// encountered while disconnecting will be returned by wait.
 //
 // This is a Linux-only API.
 func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func() error, err error) {
@@ -67,26 +70,32 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 		return 0, nil, err
 	}
 
+	configErr := make(chan error, 1)
+	defer close(configErr)
+
 	ctx, cancel := context.WithCancel(ctx)
 	ch := make(chan error, 1)
-	go func() {
-		<-ctx.Done()
-		client.Close()
-	}()
 	go func() {
 		err := serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
 		if e := ctx.Err(); e != nil {
 			err = e
 		}
 		cancel()
-		ch <- err
+		client.Close()
 		serverc.Close()
+		if <-configErr == nil {
+			if e := nbdnl.Disconnect(idx); e != nil {
+				err = fmt.Errorf("disconnect: %s", e)
+			}
+		}
+		ch <- err
 	}()
 	wait = func() error { return <-ch }
 
 	idx, err = Configure(exp, client)
 	if err != nil {
 		cancel()
+		configErr <- err
 		return 0, nil, err
 	}
 	return idx, wait, nil

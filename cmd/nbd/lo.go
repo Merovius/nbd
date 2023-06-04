@@ -19,11 +19,11 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/Merovius/nbd"
 	"github.com/google/subcommands"
@@ -90,34 +90,19 @@ func (cmd *loCmd) Execute(ctx context.Context, fs *flag.FlagSet, _ ...interface{
 		}
 	}()
 
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	idx, wait, err := nbd.Loopback(ctx, d, uint64(fi.Size()))
 	if err != nil {
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
-
-	disconnected := make(chan struct{})
-	interrupt := make(chan os.Signal, 4)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		for sig := range interrupt {
-			log.Printf("Caught %s; disconnecting /dev/nbd%d", sig, idx)
-			if err := nbdnl.Disconnect(dev.Index); err != nil {
-				log.Printf("Error while disconnecting /dev/nbd%d: %s", idx, err)
-			} else {
-				log.Printf("Disconnected /dev/nbd%d", idx)
-			}
-			close(disconnected)
-		}
-	}()
-
 	log.Printf("Connected to /dev/nbd%d", idx)
 	if err := wait(); err != nil {
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
-
-	<-disconnected
 	return subcommands.ExitSuccess
 }
 
