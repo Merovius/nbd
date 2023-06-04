@@ -174,7 +174,9 @@ func Connect(idx uint32, socks []*os.File, size uint64, cf ClientFlags, sf Serve
 	}
 
 	e := netlink.NewAttributeEncoder()
-	e.Uint32(attrIndex, idx)
+	if idx != IndexAny {
+		e.Uint32(attrIndex, idx)
+	}
 	e.Uint64(attrSizeBytes, size)
 	var sl []uint32
 	for _, s := range socks {
