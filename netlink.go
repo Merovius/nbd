@@ -18,10 +18,12 @@ package nbd
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 
 	"github.com/Merovius/nbd/nbdnl"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
 
@@ -45,6 +47,8 @@ func Configure(e Export, socks ...*os.File) (uint32, error) {
 // to connect to an NBD device. It returns the device-number that the kernel
 // chose. wait should be called to check for errors from serving the device. It
 // blocks until ctx is cancelled or an error occurs (so it behaves like Serve).
+// When ctx is cancelled, the device will be disconnected, and any error
+// encountered while disconnecting will be returned by wait.
 //
 // This is a Linux-only API.
 func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func() error, err error) {
@@ -67,27 +71,33 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 		return 0, nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	ch := make(chan error, 1)
-	go func() {
-		<-ctx.Done()
-		client.Close()
-	}()
-	go func() {
-		err := serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
-		if e := ctx.Err(); e != nil {
-			err = e
-		}
-		cancel()
-		ch <- err
-		serverc.Close()
-	}()
-	wait = func() error { return <-ch }
-
 	idx, err = Configure(exp, client)
 	if err != nil {
-		cancel()
+		client.Close()
 		return 0, nil, err
+	}
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
+	})
+	wait = func() error {
+		err := eg.Wait()
+		// canceling the context is the only way for Loopback to return, so do
+		// not consider them errors.
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			err = nil
+		}
+		if e := nbdnl.Disconnect(idx); e != nil && err == nil {
+			err = fmt.Errorf("failed to disconnect device: %w", e)
+		}
+		if e := client.Close(); e != nil && err == nil {
+			err = fmt.Errorf("failed to close client socket: %w", e)
+		}
+		if e := serverc.Close(); e != nil && err == nil {
+			err = fmt.Errorf("failed to close server connection: %w", e)
+		}
+		return err
 	}
 	return idx, wait, nil
 }

@@ -19,11 +19,11 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/Merovius/nbd"
 	"github.com/google/subcommands"
@@ -90,12 +90,15 @@ func (cmd *loCmd) Execute(ctx context.Context, fs *flag.FlagSet, _ ...interface{
 		}
 	}()
 
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	idx, wait, err := nbd.Loopback(ctx, d, uint64(fi.Size()))
 	if err != nil {
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
-	fmt.Printf("Connected to /dev/nbd%d\n", idx)
+	log.Printf("Connected to /dev/nbd%d", idx)
 	if err := wait(); err != nil {
 		log.Println(err)
 		return subcommands.ExitFailure
