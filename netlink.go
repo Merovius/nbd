@@ -18,11 +18,13 @@ package nbd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 
 	"github.com/Merovius/nbd/nbdnl"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
 
@@ -70,33 +72,32 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 		return 0, nil, err
 	}
 
-	configErr := make(chan error, 1)
-	defer close(configErr)
-
-	ctx, cancel := context.WithCancel(ctx)
-	ch := make(chan error, 1)
-	go func() {
-		err := serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
-		if e := ctx.Err(); e != nil {
-			err = e
-		}
-		cancel()
-		client.Close()
-		serverc.Close()
-		if <-configErr == nil {
-			if e := nbdnl.Disconnect(idx); e != nil {
-				err = fmt.Errorf("disconnect: %s", e)
-			}
-		}
-		ch <- err
-	}()
-	wait = func() error { return <-ch }
-
 	idx, err = Configure(exp, client)
 	if err != nil {
-		cancel()
-		configErr <- err
+		client.Close()
 		return 0, nil, err
 	}
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
+	})
+	wait = func() error {
+		var errs []error
+		if err := eg.Wait(); err != nil {
+			errs = append(errs, fmt.Errorf("serve error: %w", err))
+		}
+		if err := client.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close client socket: %w", err))
+		}
+		if err := serverc.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close server connection: %w", err))
+		}
+		if err := nbdnl.Disconnect(idx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to disconnect device: %w", err))
+		}
+		return errors.Join(errs...)
+	}
+
 	return idx, wait, nil
 }
