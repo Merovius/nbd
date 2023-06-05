@@ -18,7 +18,6 @@ package nbd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -83,21 +82,22 @@ func Loopback(ctx context.Context, d Device, size uint64) (idx uint32, wait func
 		return serve(ctx, serverc, connParameters{exp, defaultBlockSizes})
 	})
 	wait = func() error {
-		var errs []error
-		if err := eg.Wait(); err != nil {
-			errs = append(errs, fmt.Errorf("serve error: %w", err))
+		err := eg.Wait()
+		// canceling the context is the only way for Loopback to return, so do
+		// not consider them errors.
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			err = nil
 		}
-		if err := client.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close client socket: %w", err))
+		if e := nbdnl.Disconnect(idx); e != nil && err == nil {
+			err = fmt.Errorf("failed to disconnect device: %w", e)
 		}
-		if err := serverc.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close server connection: %w", err))
+		if e := client.Close(); e != nil && err == nil {
+			err = fmt.Errorf("failed to close client socket: %w", e)
 		}
-		if err := nbdnl.Disconnect(idx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to disconnect device: %w", err))
+		if e := serverc.Close(); e != nil && err == nil {
+			err = fmt.Errorf("failed to close server connection: %w", e)
 		}
-		return errors.Join(errs...)
+		return err
 	}
-
 	return idx, wait, nil
 }
