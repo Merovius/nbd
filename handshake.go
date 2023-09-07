@@ -132,7 +132,7 @@ func serverHandshake(rw io.ReadWriter, exp []Export) (connParameters, error) {
 // Client performs the client-side of the NBD network protocol handshake and
 // can be used to query information about the exports from a server.
 type Client struct {
-	rw     io.ReadWriter
+	rw     io.ReadWriteCloser
 	closed bool
 }
 
@@ -213,7 +213,7 @@ func (c *Client) Abort() error {
 	return do(c.rw, func(e *encoder) {
 		c.send(e, &optAbort{})
 		rep := c.recv(e, cOptAbort)
-		c.closed = true
+		c.close()
 		switch rep.(type) {
 		case *repAck:
 		default:
@@ -290,8 +290,15 @@ func (c *Client) Info(exportName string) (Export, error) {
 // export will be used. c should not be used after Go returns.
 func (c *Client) Go(exportName string) (Export, error) {
 	ex, err := c.info(exportName, true)
-	c.closed = true
+	c.close()
 	return ex, err
+}
+
+// close marks the Client closed, preventing it from further use, and cleans up
+// the connection wrapper. It does not close the wrapped connection.
+func (c *Client) close() error {
+	c.closed = true
+	return c.rw.Close()
 }
 
 // findExport searches the list of exports for one with the given name. If name
