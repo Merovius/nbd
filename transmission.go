@@ -16,6 +16,7 @@ package nbd
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -80,7 +81,9 @@ func Serve(ctx context.Context, c net.Conn, exp ...Export) error {
 // serve serves nbd requests for a connection in transmission mode using p. It
 // returns after ctx is cancelled or an error occurs.
 func serve(ctx context.Context, c net.Conn, p connParameters) error {
-	return do(wrapConn(ctx, c), func(e *encoder) {
+	rw := wrapConn(ctx, c)
+	defer rw.Close()
+	return do(rw, func(e *encoder) {
 		var req request
 		for {
 			if err := req.decode(e); err != nil {
@@ -145,68 +148,55 @@ func respondErr(e *encoder, handle uint64, err error) {
 	rep.encode(e)
 }
 
-// ctxRW wraps a net.Conn to provide cancellation. It does so by setting a
-// low-ish timeout on each read/write call. If the call times out, it checks if
-// its context is done and if not, retries it.
+// ctxRW wraps a net.Conn to respect context cancellation. It does so by
+// starting a goroutine that sets the connection's read/write deadline in the
+// past whenever the context is cancelled.
 type ctxRW struct {
-	ctx   context.Context
-	c     net.Conn
-	hasDL bool
-	dl    time.Time
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	c      net.Conn
+	done   <-chan struct{}
 }
 
 // wrapConn wraps a connection in a ctxRW.
-func wrapConn(ctx context.Context, c net.Conn) io.ReadWriter {
-	dl, ok := ctx.Deadline()
-	return &ctxRW{ctx, c, ok, dl}
+func wrapConn(ctx context.Context, c net.Conn) io.ReadWriteCloser {
+	// Note: cancel is called by Close().
+	ctx, cancel := context.WithCancelCause(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		<-ctx.Done()
+		c.SetDeadline(time.Now())
+	}()
+	return &ctxRW{ctx, cancel, c, done}
 }
 
-// maybeIgnore checks whether err is an error we want to ignore (i.e. a timeout
-// without ctx being cancelled) and returns nil, if so.
-func (rw *ctxRW) maybeIgnore(err error) error {
-	if e := rw.ctx.Err(); e != nil {
-		return e
-	}
-	if to, ok := err.(interface{ Timeout() bool }); ok && to.Timeout() {
-		return nil
-	}
-	return err
-}
-
-// setDeadline sets the deadline for the next read/write.
-func (rw *ctxRW) setDeadline() {
-	dl := time.Now().Add(100 * time.Millisecond)
-	if rw.hasDL && dl.After(rw.dl) {
-		dl = rw.dl
-	}
-	rw.c.SetDeadline(dl)
-}
-
-// Read implements io.Reader. It returns ctx.Err if the context was cancelled.
+// Read implements io.Reader. It returns context.Cause(ctx) if the read was
+// aborted due to context cancellation.
 func (rw *ctxRW) Read(p []byte) (n int, err error) {
-	var m int
-	err = rw.ctx.Err()
-	for err == nil && n < len(p) {
-		rw.setDeadline()
-		m, err = rw.c.Read(p[n:])
-		n += m
-		if err == nil {
-			return n, err
-		}
-		err = rw.maybeIgnore(err)
+	n, err = rw.c.Read(p)
+	if e := context.Cause(rw.ctx); e != nil {
+		err = e
 	}
 	return n, err
 }
 
-// Write implements io.Writer. It returns ctx.Err if the context was cancelled.
+// Write implements io.Writer. It returns context.Cause(ctx) if the write was
+// aborted due to context cancellation.
 func (rw *ctxRW) Write(p []byte) (n int, err error) {
-	var m int
-	err = rw.ctx.Err()
-	for err == nil && n < len(p) {
-		rw.setDeadline()
-		m, err = rw.c.Write(p[n:])
-		n += m
-		err = rw.maybeIgnore(err)
+	n, err = rw.c.Write(p)
+	if e := context.Cause(rw.ctx); e != nil {
+		err = e
 	}
 	return n, err
+}
+
+// Close implements io.Closer. It cleans up the resources associated with the
+// ctxRW, but not the wrapped net.Conn. The wrapped net.Conn must be closed by
+// the caller separately, otherwise any pending read/write operation may be left
+// running indefinitely.
+func (rw *ctxRW) Close() error {
+	rw.cancel(errors.New("wrapped connection was closed"))
+	<-rw.done
+	return nil
 }
