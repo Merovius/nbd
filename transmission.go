@@ -53,11 +53,24 @@ func ListenAndServe(ctx context.Context, network, addr string, exp ...Export) er
 		return err
 	}
 	var wg sync.WaitGroup
+
+	quit := make(chan any)
+	go func() {
+		<-ctx.Done()
+		close(quit)
+		l.Close()
+	}()
+
 	defer wg.Wait()
 	for {
 		c, err := l.Accept()
 		if err != nil {
-			return err
+			select {
+			case <-quit:
+				return nil
+			default:
+				return err
+			}
 		}
 		wg.Add(1)
 		go func() {
