@@ -48,29 +48,29 @@ type Device interface {
 // cancelled or an unrecoverable error occurs. Either way, it will wait for all
 // connections to terminate first.
 func ListenAndServe(ctx context.Context, network, addr string, exp ...Export) error {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	l, err := net.Listen(network, addr)
 	if err != nil {
 		return err
 	}
-	var wg sync.WaitGroup
 
-	quit := make(chan any)
 	go func() {
-		<-ctx.Done()
-		close(quit)
+		<-ctxCancel.Done()
 		l.Close()
 	}()
 
-	defer wg.Wait()
 	for {
 		c, err := l.Accept()
 		if err != nil {
-			select {
-			case <-quit:
+			if errors.Is(err, net.ErrClosed) {
 				return nil
-			default:
-				return err
 			}
+			return err
 		}
 		wg.Add(1)
 		go func() {
