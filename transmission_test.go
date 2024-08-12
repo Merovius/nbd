@@ -2,7 +2,6 @@ package nbd
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,18 +11,18 @@ func TestListenAndServeContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, _ := os.MkdirTemp("", "")
+	dir := t.TempDir()
 
 	sockFile := filepath.Join(dir, "nbd.sock")
 
 	// Start the server
 	exited := make(chan any)
 	go func() {
-		lErr := ListenAndServe(ctx, "unix", sockFile, Export{})
-		if lErr != nil {
-			t.Errorf("ListenAndServe returned an error: %v", lErr)
+		defer close(exited)
+		err := ListenAndServe(ctx, "unix", sockFile, Export{})
+		if err != nil {
+			t.Errorf("ListenAndServe returned an error: %v", err)
 		}
-		close(exited)
 	}()
 
 	// Simulate the server working for some time
@@ -44,18 +43,18 @@ func TestListenAndServeContextNoCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, _ := os.MkdirTemp("", "")
+	dir := t.TempDir()
 
 	sockFile := filepath.Join(dir, "nbd.sock")
 
 	// Start the server
 	exited := make(chan any)
 	go func() {
-		lErr := ListenAndServe(ctx, "unix", sockFile, Export{})
-		if lErr != nil {
-			t.Errorf("ListenAndServe returned an error: %v", lErr)
+		defer close(exited)
+		err := ListenAndServe(ctx, "unix", sockFile, Export{})
+		if err != nil {
+			t.Errorf("ListenAndServe returned an error: %v", err)
 		}
-		close(exited)
 	}()
 
 	// Simulate the server working for some time
