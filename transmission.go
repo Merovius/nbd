@@ -61,9 +61,9 @@ func ListenAndServe(ctx context.Context, network, addr string, exp ...Export) er
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-ctxCancel.Done()
 		l.Close()
-		wg.Done()
 	}()
 
 	for {
